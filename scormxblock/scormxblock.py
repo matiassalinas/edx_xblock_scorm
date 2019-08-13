@@ -204,33 +204,31 @@ class ScormXBlock(XBlock):
         context = {'result': 'success'}
         name = data.get('name')
 
-        if name in ['cmi.core.lesson_status', 'cmi.completion_status']:
-            self.lesson_status = data.get('value')
-            if self.has_score and data.get('value') in ['completed', 'failed', 'passed']:
-                self.publish_grade()
-                context.update({"lesson_score": self.lesson_score})
+        if not self.is_past_due():
+            if name in ['cmi.core.lesson_status', 'cmi.completion_status']:
+                self.lesson_status = data.get('value')
+                if self.has_score and data.get('value') in ['completed', 'failed', 'passed']:
+                    self.publish_grade()
+                    context.update({"lesson_score": self.lesson_score})
 
-        elif name == 'cmi.success_status':
-            self.success_status = data.get('value')
-            if self.has_score:
-                if self.success_status == 'unknown':
-                    self.lesson_score = 0
+            elif name == 'cmi.success_status':
+                self.success_status = data.get('value')
+                if self.has_score:
+                    if self.success_status == 'unknown':
+                        self.lesson_score = 0
+                    self.publish_grade()
+                    context.update({"lesson_score": self.lesson_score})
+            elif name in ['cmi.core.score.raw', 'cmi.score.raw'] and self.has_score:
+                self.lesson_score = int(data.get('value', 0))/100.0 * self.weight
                 self.publish_grade()
                 context.update({"lesson_score": self.lesson_score})
-        elif name in ['cmi.core.score.raw', 'cmi.score.raw'] and self.has_score:
-            self.lesson_score = int(data.get('value', 0))/100.0 * self.weight
-            self.publish_grade()
-            context.update({"lesson_score": self.lesson_score})
-        else:
-            self.data_scorm[name] = data.get('value', '')
+            else:
+                self.data_scorm[name] = data.get('value', '')
 
         context.update({"completion_status": self.get_completion_status()})
         return context
 
     def publish_grade(self):
-        if self.is_past_due():
-            return None
-
         if self.lesson_status == 'failed' or (self.version_scorm == 'SCORM_2004'
                                               and self.success_status in ['failed', 'unknown']):
             self.runtime.publish(

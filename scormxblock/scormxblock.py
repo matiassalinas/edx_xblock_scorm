@@ -20,6 +20,9 @@ from xblock.core import XBlock
 from xblock.fields import Scope, String, Float, Boolean, Dict, DateTime, Integer
 from xblock.fragment import Fragment
 
+from xmodule.util.duedate import get_extended_due_date
+from datetime import datetime
+import pytz
 
 
 # Make '_' a no-op so we can scrape strings
@@ -225,6 +228,9 @@ class ScormXBlock(XBlock):
         return context
 
     def publish_grade(self):
+        if self.is_past_due():
+            return None
+
         if self.lesson_status == 'failed' or (self.version_scorm == 'SCORM_2004'
                                               and self.success_status in ['failed', 'unknown']):
             self.runtime.publish(
@@ -242,7 +248,28 @@ class ScormXBlock(XBlock):
                     'value': self.lesson_score,
                     'max_value': self.weight,
                 })
-
+    
+    def is_past_due(self):
+        """
+        Return whether due date has passed.
+        """
+        due = get_extended_due_date(self)
+        try:
+            graceperiod = self.graceperiod
+        except AttributeError:
+            # graceperiod and due are defined in InheritanceMixin
+            # It's used automatically in edX but the unit tests will need to mock it out
+            graceperiod = None
+            
+        if graceperiod is not None and due:
+            close_date = due + graceperiod
+        else:
+            close_date = due
+        
+        if close_date is not None:
+            return datetime.now(tz=pytz.utc) > close_date
+        return False
+    
     def max_score(self):
         """
         Return the maximum score possible.
@@ -273,6 +300,7 @@ class ScormXBlock(XBlock):
         return {
             'scorm_file_path': scorm_file_path,
             'completion_status': self.get_completion_status(),
+            'is_past_due': self.is_past_due(),
             'scorm_xblock': self
         }
 
